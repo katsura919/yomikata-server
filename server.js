@@ -1,13 +1,12 @@
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MANGADEX_API = "https://api.mangadex.org";
 
-app.use(cors()); // Allow cross-origin requests
-app.use(express.json()); // Parse JSON requests
+app.use(cors());
+app.use(express.json());
 
 app.get("/manga/:id", async (req, res) => {
   try {
@@ -21,13 +20,12 @@ app.get("/manga/:id", async (req, res) => {
 
     const manga = data.data;
 
-    // Extract cover image
     const coverRel = manga.relationships.find((rel) => rel.type === "cover_art");
-    const coverImage = coverRel?.attributes?.fileName
-      ? `https://uploads.mangadex.org/covers/${id}/${coverRel.attributes.fileName}`
+    const coverFileName = coverRel?.attributes?.fileName || null;
+    const coverImage = coverFileName
+      ? `/cover/${id}/${coverFileName}`
       : null;
-
-    // Extract author(s) and artist(s)
+   
     const authors = manga.relationships
       .filter((rel) => rel.type === "author")
       .map((rel) => rel.attributes?.name)
@@ -38,10 +36,7 @@ app.get("/manga/:id", async (req, res) => {
       .map((rel) => rel.attributes?.name)
       .join(", ") || "Unknown";
 
-    // Extract description (fallback to "No description available")
     const description = manga.attributes.description?.en || "No description available";
-
-    // Extract all alternative titles
     const altTitles = manga.attributes.altTitles
       ?.flatMap((titleObj) => Object.values(titleObj)) || [];
 
@@ -62,6 +57,25 @@ app.get("/manga/:id", async (req, res) => {
   } catch (error) {
     console.error("Error fetching manga details:", error);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// New endpoint to proxy the cover image
+app.get("/cover/:id/:filename", async (req, res) => {
+  const { id, filename } = req.params;
+  const coverUrl = `https://uploads.mangadex.org/covers/${id}/${filename}`;
+
+  try {
+    const response = await axios.get(coverUrl, {
+      responseType: "arraybuffer", // Get raw image data
+      headers: { "User-Agent": "Yomikata/0.1.0" }, // Avoid getting blocked
+    });
+
+    res.set("Content-Type", response.headers["content-type"]);
+    res.send(response.data);
+  } catch (error) {
+    console.error("Error fetching manga cover:", error);
+    res.status(500).send("Error fetching cover image");
   }
 });
 
